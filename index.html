@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="🏀タイマー">
+<meta name="theme-color" content="#0a0a0a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>🏀 練習タイマー</title>
+<style>
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; -webkit-user-select: none; }
+html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; background: #0a0a0a; color: #fff; font-family: -apple-system, BlinkMacSystemFont, sans-serif; }
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); display: flex; flex-direction: column; }
+
+/* ==================== SCORE PANEL ==================== */
+.scores { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; padding: 4px; flex: 1; min-height: 0; }
+.team { background: linear-gradient(180deg, #1a1a1a, #050505); border-radius: 12px; padding: 10px 6px; display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; }
+.team.home { border: 2px solid #d35400; }
+.team.away { border: 2px solid #2980b9; }
+.team-name { font-size: clamp(.9rem, 4vw, 1.3rem); font-weight: 700; opacity: .85; cursor: pointer; margin-bottom: 2px; padding: 2px 8px; border-radius: 4px; }
+.team-name:active { background: rgba(255,255,255,.1); }
+.score-num { font-size: clamp(4.5rem, 24vw, 9rem); font-weight: 900; line-height: 1; font-variant-numeric: tabular-nums; letter-spacing: -.05em; }
+.team.home .score-num { color: #f39c12; }
+.team.away .score-num { color: #5dade2; }
+.score-stats { display: flex; gap: 12px; font-size: clamp(.65rem, 2.4vw, .85rem); opacity: .65; margin: 4px 0; }
+.score-btns { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; width: 100%; margin-top: 4px; }
+.score-btns button { font-size: clamp(.95rem, 4.5vw, 1.4rem); font-weight: 800; padding: 10px 0; border-radius: 8px; border: none; background: rgba(255,255,255,.1); color: #fff; cursor: pointer; }
+.score-btns button:active { transform: scale(.95); background: rgba(255,255,255,.2); }
+.score-row2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; width: 100%; margin-top: 4px; }
+.score-row2 button { font-size: clamp(.7rem, 3vw, .9rem); font-weight: 600; padding: 7px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,.2); background: transparent; color: #fff; cursor: pointer; }
+.score-row2 button:active { transform: scale(.95); background: rgba(255,255,255,.15); }
+.possession { position: absolute; top: 6px; font-size: 1.4rem; opacity: 0; transition: opacity .2s; }
+.team.home .possession { right: 8px; }
+.team.away .possession { left: 8px; }
+.team.has-poss .possession { opacity: 1; }
+
+/* ==================== CLOCKS ==================== */
+.clocks { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 4px; padding: 4px; }
+.clock-box { background: #1a1a1a; border-radius: 10px; padding: 8px 6px; display: flex; flex-direction: column; align-items: center; }
+.clock-label { font-size: clamp(.55rem, 2.2vw, .7rem); opacity: .55; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; margin-bottom: 2px; }
+.clock-time { font-size: clamp(2rem, 11vw, 4rem); font-weight: 900; font-variant-numeric: tabular-nums; line-height: 1; letter-spacing: -.04em; color: #27ae60; cursor: pointer; }
+.clock-time.paused { color: #f39c12; }
+.clock-time.zero { color: #e74c3c; animation: flash 0.5s infinite; }
+@keyframes flash { 50% { opacity: 0.3; } }
+.clock-btns { display: flex; gap: 3px; margin-top: 4px; width: 100%; }
+.clock-btns button { flex: 1; font-size: clamp(.6rem, 2.4vw, .8rem); padding: 6px 0; border: none; border-radius: 5px; background: rgba(255,255,255,.12); color: #fff; cursor: pointer; font-weight: 700; }
+.clock-btns button.primary { background: #27ae60; }
+.clock-btns button.primary.paused { background: #e67e22; }
+.clock-btns button:active { transform: scale(.93); }
+
+.shot-mode { display: flex; gap: 2px; margin-bottom: 2px; }
+.shot-mode button { padding: 3px 8px; font-size: .7rem; border: 1px solid rgba(255,255,255,.3); border-radius: 4px; background: transparent; color: #fff; cursor: pointer; }
+.shot-mode button.active { background: #fff; color: #000; }
+
+/* ==================== BOTTOM BAR ==================== */
+.bottom-bar { display: flex; gap: 4px; padding: 4px; }
+.bottom-bar button { flex: 1; padding: 8px; font-size: .8rem; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; background: transparent; color: #fff; cursor: pointer; font-weight: 600; }
+.bottom-bar button:active { background: rgba(255,255,255,.15); }
+
+/* ==================== MODAL ==================== */
+.modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
+.modal-bg.show { display: flex; }
+.modal { background: #1a1a1a; border-radius: 14px; padding: 18px; max-width: 90vw; max-height: 85vh; overflow-y: auto; min-width: 280px; }
+.modal h2 { margin: 0 0 12px; font-size: 1.1rem; }
+.modal input { width: 100%; padding: 10px; font-size: 1rem; background: #0a0a0a; color: #fff; border: 1px solid #444; border-radius: 6px; margin-bottom: 10px; }
+.modal .row { display: flex; gap: 8px; margin-bottom: 10px; }
+.modal button { padding: 10px 14px; font-size: .9rem; border-radius: 6px; border: none; background: #2980b9; color: #fff; font-weight: 600; cursor: pointer; flex: 1; }
+.modal button.secondary { background: #555; }
+.modal button.danger { background: #c0392b; }
+.history-item { padding: 8px; border-bottom: 1px solid #333; font-size: .85rem; }
+.preset-btns { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; margin-bottom: 10px; }
+.preset-btns button { padding: 8px 0; background: #333; }
+</style>
+</head>
+<body>
+
+<!-- ==================== SCORES ==================== -->
+<div class="scores">
+  <div class="team home" id="teamHome">
+    <span class="possession">🏀</span>
+    <div class="team-name" onclick="editTeamName('home')" id="nameHome">HOME</div>
+    <div class="score-num" id="scoreHome">0</div>
+    <div class="score-stats"><span>F: <b id="foulHome">0</b></span><span>TO: <b id="toHome">0</b></span></div>
+    <div class="score-btns">
+      <button onclick="addScore('home', 1)">+1</button>
+      <button onclick="addScore('home', 2)">+2</button>
+      <button onclick="addScore('home', 3)">+3</button>
+    </div>
+    <div class="score-row2">
+      <button onclick="addScore('home', -1)">−1</button>
+      <button onclick="addFoul('home', 1)">F+1</button>
+      <button onclick="addTimeout('home', 1)">TO+1</button>
+    </div>
+  </div>
+
+  <div class="team away" id="teamAway">
+    <span class="possession">🏀</span>
+    <div class="team-name" onclick="editTeamName('away')" id="nameAway">AWAY</div>
+    <div class="score-num" id="scoreAway">0</div>
+    <div class="score-stats"><span>F: <b id="foulAway">0</b></span><span>TO: <b id="toAway">0</b></span></div>
+    <div class="score-btns">
+      <button onclick="addScore('away', 1)">+1</button>
+      <button onclick="addScore('away', 2)">+2</button>
+      <button onclick="addScore('away', 3)">+3</button>
+    </div>
+    <div class="score-row2">
+      <button onclick="addScore('away', -1)">−1</button>
+      <button onclick="addFoul('away', 1)">F+1</button>
+      <button onclick="addTimeout('away', 1)">TO+1</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== CLOCKS ==================== -->
+<div class="clocks">
+  <!-- Main game clock -->
+  <div class="clock-box">
+    <div class="clock-label">プレイ時間</div>
+    <div class="clock-time" id="mainTime" onclick="editMainTime()">10:00</div>
+    <div class="clock-btns">
+      <button class="primary" id="mainBtn" onclick="toggleMain()">▶ START</button>
+      <button onclick="resetMain()">RESET</button>
+    </div>
+  </div>
+
+  <!-- Shot clock -->
+  <div class="clock-box">
+    <div class="clock-label">ショット</div>
+    <div class="shot-mode">
+      <button id="shot24" class="active" onclick="setShotMode(24)">24</button>
+      <button id="shot14" onclick="setShotMode(14)">14</button>
+    </div>
+    <div class="clock-time" id="shotTime">24</div>
+    <div class="clock-btns">
+      <button class="primary" id="shotBtn" onclick="toggleShot()">▶</button>
+      <button onclick="resetShot()">↻</button>
+    </div>
+  </div>
+
+  <!-- Timeout clock -->
+  <div class="clock-box">
+    <div class="clock-label">タイムアウト</div>
+    <div class="clock-time" id="toTime" onclick="editTimeout()">60</div>
+    <div class="clock-btns">
+      <button class="primary" id="toBtn" onclick="toggleTO()">▶</button>
+      <button onclick="resetTO()">↻</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== BOTTOM BAR ==================== -->
+<div class="bottom-bar">
+  <button onclick="togglePossession()">🏀 ポゼッション切替</button>
+  <button onclick="saveGame()">💾 試合保存</button>
+  <button onclick="resetAll()">🔄 全リセット</button>
+  <button onclick="showHistory()">📊 履歴</button>
+</div>
+
+<!-- ==================== MODALS ==================== -->
+<div class="modal-bg" id="modalBg">
+  <div class="modal" id="modalContent"></div>
+</div>
+
+<script>
+// ==================== STATE ====================
+let state = {
+  home: { score: 0, foul: 0, to: 0, name: 'HOME' },
+  away: { score: 0, foul: 0, to: 0, name: 'AWAY' },
+  possession: null, // 'home' | 'away' | null
+  main: { time: 600, initial: 600, running: false, lastTick: 0 }, // seconds
+  shot: { time: 24, mode: 24, running: false, lastTick: 0 },
+  timeout: { time: 60, initial: 60, running: false, lastTick: 0 }
+};
+
+// ==================== AUDIO ====================
+let audioCtx = null;
+function beep(freq = 880, dur = 0.4, type = 'square') {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.type = type;
+    osc.frequency.value = freq;
+    gain.gain.value = 0.3;
+    osc.connect(gain).connect(audioCtx.destination);
+    osc.start();
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + dur);
+    osc.stop(audioCtx.currentTime + dur);
+  } catch(e) { console.error(e); }
+}
+function buzzer() {
+  beep(660, 0.3); setTimeout(() => beep(880, 0.5), 350);
+  if (navigator.vibrate) navigator.vibrate([200, 100, 400]);
+}
+
+// ==================== WAKE LOCK ====================
+let wakeLock = null;
+async function acquireWakeLock() {
+  try {
+    if ('wakeLock' in navigator) wakeLock = await navigator.wakeLock.request('screen');
+  } catch(e) {}
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && (state.main.running || state.shot.running || state.timeout.running)) acquireWakeLock();
+});
+
+// ==================== SCORE ====================
+function addScore(team, delta) {
+  state[team].score = Math.max(0, state[team].score + delta);
+  render(); save();
+}
+function addFoul(team, delta) {
+  state[team].foul = Math.max(0, state[team].foul + delta);
+  render(); save();
+}
+function addTimeout(team, delta) {
+  state[team].to = Math.max(0, state[team].to + delta);
+  render(); save();
+}
+function editTeamName(team) {
+  showModal(`
+    <h2>${team === 'home' ? 'HOME' : 'AWAY'}チーム名</h2>
+    <input id="modalInput" value="${state[team].name}" maxlength="12">
+    <div class="row">
+      <button onclick="closeModal()" class="secondary">キャンセル</button>
+      <button onclick="state['${team}'].name = document.getElementById('modalInput').value || '${team.toUpperCase()}'; render(); save(); closeModal();">保存</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('modalInput').select(), 100);
+}
+function togglePossession() {
+  state.possession = state.possession === 'home' ? 'away' : (state.possession === 'away' ? null : 'home');
+  render(); save();
+}
+
+// ==================== MAIN CLOCK ====================
+function formatTime(sec) {
+  sec = Math.max(0, Math.ceil(sec));
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${s.toString().padStart(2, '0')}`;
+}
+function toggleMain() {
+  state.main.running = !state.main.running;
+  if (state.main.running) { state.main.lastTick = Date.now(); acquireWakeLock(); beep(440, 0.1); }
+  render(); save();
+}
+function resetMain() {
+  state.main.running = false;
+  state.main.time = state.main.initial;
+  render(); save();
+}
+function editMainTime() {
+  if (state.main.running) return;
+  showModal(`
+    <h2>プレイ時間設定</h2>
+    <div class="preset-btns">
+      <button onclick="setMainTime(60)">1分</button>
+      <button onclick="setMainTime(180)">3分</button>
+      <button onclick="setMainTime(300)">5分</button>
+      <button onclick="setMainTime(420)">7分</button>
+      <button onclick="setMainTime(600)">10分</button>
+      <button onclick="setMainTime(720)">12分</button>
+      <button onclick="setMainTime(900)">15分</button>
+      <button onclick="setMainTime(1200)">20分</button>
+    </div>
+    <div class="row" style="align-items:center">
+      <input id="modalMin" type="number" value="${Math.floor(state.main.initial / 60)}" min="0" max="99" style="flex:1" placeholder="分">
+      <span style="font-size:1.2rem">:</span>
+      <input id="modalSec" type="number" value="${state.main.initial % 60}" min="0" max="59" style="flex:1" placeholder="秒">
+    </div>
+    <div class="row">
+      <button onclick="closeModal()" class="secondary">キャンセル</button>
+      <button onclick="const m=+document.getElementById('modalMin').value||0; const s=+document.getElementById('modalSec').value||0; setMainTime(m*60+s);">設定</button>
+    </div>
+  `);
+}
+function setMainTime(sec) {
+  state.main.initial = sec;
+  state.main.time = sec;
+  state.main.running = false;
+  render(); save(); closeModal();
+}
+
+// ==================== SHOT CLOCK ====================
+function setShotMode(n) {
+  state.shot.mode = n;
+  resetShot();
+}
+function toggleShot() {
+  state.shot.running = !state.shot.running;
+  if (state.shot.running) { state.shot.lastTick = Date.now(); acquireWakeLock(); beep(440, 0.1); }
+  render(); save();
+}
+function resetShot() {
+  state.shot.time = state.shot.mode;
+  state.shot.running = false;
+  render(); save();
+}
+
+// ==================== TIMEOUT ====================
+function toggleTO() {
+  state.timeout.running = !state.timeout.running;
+  if (state.timeout.running) { state.timeout.lastTick = Date.now(); acquireWakeLock(); beep(440, 0.1); }
+  render(); save();
+}
+function resetTO() {
+  state.timeout.time = state.timeout.initial;
+  state.timeout.running = false;
+  render(); save();
+}
+function editTimeout() {
+  if (state.timeout.running) return;
+  showModal(`
+    <h2>タイムアウト秒数</h2>
+    <div class="preset-btns">
+      <button onclick="setTOTime(30)">30秒</button>
+      <button onclick="setTOTime(45)">45秒</button>
+      <button onclick="setTOTime(60)">60秒</button>
+      <button onclick="setTOTime(90)">90秒</button>
+    </div>
+    <input id="modalTO" type="number" value="${state.timeout.initial}" min="1" max="999">
+    <div class="row">
+      <button onclick="closeModal()" class="secondary">キャンセル</button>
+      <button onclick="setTOTime(+document.getElementById('modalTO').value || 60);">設定</button>
+    </div>
+  `);
+}
+function setTOTime(sec) {
+  state.timeout.initial = sec;
+  state.timeout.time = sec;
+  state.timeout.running = false;
+  render(); save(); closeModal();
+}
+
+// ==================== TICK LOOP ====================
+function tick() {
+  const now = Date.now();
+  let needRender = false;
+  for (const k of ['main', 'shot', 'timeout']) {
+    const c = state[k];
+    if (c.running) {
+      const dt = (now - c.lastTick) / 1000;
+      const prev = c.time;
+      c.time -= dt;
+      c.lastTick = now;
+      if (c.time <= 0) {
+        c.time = 0;
+        c.running = false;
+        buzzer();
+        save();
+      }
+      if (Math.ceil(prev) !== Math.ceil(c.time)) needRender = true;
+    }
+  }
+  if (needRender) render();
+  requestAnimationFrame(tick);
+}
+
+// ==================== RENDER ====================
+function render() {
+  // Scores
+  document.getElementById('scoreHome').textContent = state.home.score;
+  document.getElementById('scoreAway').textContent = state.away.score;
+  document.getElementById('foulHome').textContent = state.home.foul;
+  document.getElementById('foulAway').textContent = state.away.foul;
+  document.getElementById('toHome').textContent = state.home.to;
+  document.getElementById('toAway').textContent = state.away.to;
+  document.getElementById('nameHome').textContent = state.home.name;
+  document.getElementById('nameAway').textContent = state.away.name;
+  document.getElementById('teamHome').classList.toggle('has-poss', state.possession === 'home');
+  document.getElementById('teamAway').classList.toggle('has-poss', state.possession === 'away');
+
+  // Main clock
+  const mt = document.getElementById('mainTime');
+  mt.textContent = formatTime(state.main.time);
+  mt.className = 'clock-time' + (state.main.time === 0 ? ' zero' : (state.main.running ? '' : ' paused'));
+  const mb = document.getElementById('mainBtn');
+  mb.textContent = state.main.running ? '⏸ PAUSE' : '▶ START';
+  mb.className = 'primary' + (state.main.running ? ' paused' : '');
+
+  // Shot
+  const st = document.getElementById('shotTime');
+  st.textContent = Math.ceil(state.shot.time);
+  st.className = 'clock-time' + (state.shot.time === 0 ? ' zero' : (state.shot.running ? '' : ' paused'));
+  document.getElementById('shot24').classList.toggle('active', state.shot.mode === 24);
+  document.getElementById('shot14').classList.toggle('active', state.shot.mode === 14);
+  const sb = document.getElementById('shotBtn');
+  sb.textContent = state.shot.running ? '⏸' : '▶';
+  sb.className = 'primary' + (state.shot.running ? ' paused' : '');
+
+  // Timeout
+  const tt = document.getElementById('toTime');
+  tt.textContent = Math.ceil(state.timeout.time);
+  tt.className = 'clock-time' + (state.timeout.time === 0 ? ' zero' : (state.timeout.running ? '' : ' paused'));
+  const tb = document.getElementById('toBtn');
+  tb.textContent = state.timeout.running ? '⏸' : '▶';
+  tb.className = 'primary' + (state.timeout.running ? ' paused' : '');
+}
+
+// ==================== STORAGE ====================
+function save() {
+  try { localStorage.setItem('bball_state', JSON.stringify(state)); } catch(e) {}
+}
+function load() {
+  try {
+    const s = localStorage.getItem('bball_state');
+    if (s) {
+      const loaded = JSON.parse(s);
+      // Don't restore running state across reloads
+      loaded.main.running = false;
+      loaded.shot.running = false;
+      loaded.timeout.running = false;
+      state = loaded;
+    }
+  } catch(e) {}
+}
+
+// ==================== GAME HISTORY ====================
+function saveGame() {
+  const history = JSON.parse(localStorage.getItem('bball_history') || '[]');
+  history.unshift({
+    date: new Date().toLocaleString('ja-JP'),
+    home: { name: state.home.name, score: state.home.score, foul: state.home.foul },
+    away: { name: state.away.name, score: state.away.score, foul: state.away.foul }
+  });
+  localStorage.setItem('bball_history', JSON.stringify(history.slice(0, 50)));
+  showModal(`<h2>保存しました</h2><p>${state.home.name} ${state.home.score} - ${state.away.score} ${state.away.name}</p><div class="row"><button onclick="closeModal()">OK</button></div>`);
+}
+function showHistory() {
+  const history = JSON.parse(localStorage.getItem('bball_history') || '[]');
+  const html = history.length === 0
+    ? '<p style="opacity:.6">履歴なし</p>'
+    : history.map((g, i) => `<div class="history-item">${g.date}<br><b>${g.home.name} ${g.home.score} - ${g.away.score} ${g.away.name}</b></div>`).join('');
+  showModal(`
+    <h2>📊 試合履歴（直近50件）</h2>
+    ${html}
+    <div class="row" style="margin-top:12px">
+      <button onclick="closeModal()" class="secondary">閉じる</button>
+      ${history.length > 0 ? '<button onclick="if(confirm(\'履歴を全削除しますか？\')){localStorage.removeItem(\'bball_history\');closeModal();}" class="danger">全削除</button>' : ''}
+    </div>
+  `);
+}
+
+// ==================== RESET ====================
+function resetAll() {
+  if (!confirm('スコア・ファウル・タイムアウト・タイマーを全リセットしますか？')) return;
+  state.home.score = 0; state.home.foul = 0; state.home.to = 0;
+  state.away.score = 0; state.away.foul = 0; state.away.to = 0;
+  state.possession = null;
+  state.main.time = state.main.initial; state.main.running = false;
+  state.shot.time = state.shot.mode; state.shot.running = false;
+  state.timeout.time = state.timeout.initial; state.timeout.running = false;
+  render(); save();
+}
+
+// ==================== MODAL ====================
+function showModal(html) {
+  document.getElementById('modalContent').innerHTML = html;
+  document.getElementById('modalBg').classList.add('show');
+}
+function closeModal() {
+  document.getElementById('modalBg').classList.remove('show');
+}
+document.getElementById('modalBg').addEventListener('click', e => {
+  if (e.target.id === 'modalBg') closeModal();
+});
+
+// ==================== INIT ====================
+load();
+render();
+tick();
+
+// PWA service worker
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}
+</script>
+</body>
+</html>
