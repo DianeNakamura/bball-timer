@@ -32,6 +32,9 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .score-row2 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px; width: 100%; margin-top: 4px; }
 .score-row2 button { font-size: clamp(.7rem, 3vw, .9rem); font-weight: 600; padding: 7px 0; border-radius: 8px; border: 1px solid rgba(255,255,255,.2); background: transparent; color: #fff; cursor: pointer; }
 .score-row2 button:active { transform: scale(.95); background: rgba(255,255,255,.15); }
+.score-row3 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; width: 100%; margin-top: 4px; }
+.score-row3 button { font-size: clamp(.7rem, 3vw, .9rem); font-weight: 600; padding: 7px 0; border-radius: 8px; border: 1px solid rgba(255,200,200,.3); background: rgba(231, 76, 60, .15); color: #fff; cursor: pointer; }
+.score-row3 button:active { transform: scale(.95); background: rgba(231, 76, 60, .3); }
 .possession { position: absolute; top: 6px; font-size: 1.4rem; opacity: 0; transition: opacity .2s; }
 .team.home .possession { right: 8px; }
 .team.away .possession { left: 8px; }
@@ -59,6 +62,25 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
 .bottom-bar { display: flex; gap: 4px; padding: 4px; }
 .bottom-bar button { flex: 1; padding: 8px; font-size: .8rem; border: 1px solid rgba(255,255,255,.2); border-radius: 6px; background: transparent; color: #fff; cursor: pointer; font-weight: 600; }
 .bottom-bar button:active { background: rgba(255,255,255,.15); }
+
+/* ==================== 横画面（landscape） ==================== */
+@media (orientation: landscape) and (max-height: 500px) {
+  .scores { padding: 3px; gap: 3px; }
+  .team { padding: 4px 4px; }
+  .team-name { font-size: clamp(.7rem, 2.5vmin, 1rem); margin-bottom: 0; }
+  .score-num { font-size: clamp(2.5rem, 18vmin, 6rem); }
+  .score-stats { font-size: clamp(.6rem, 2vmin, .75rem); gap: 8px; margin: 2px 0; }
+  .score-btns button { font-size: clamp(.8rem, 3.5vmin, 1.1rem); padding: 6px 0; }
+  .score-row2 button, .score-row3 button { padding: 5px 0; font-size: clamp(.6rem, 2.4vmin, .8rem); }
+  .clocks { padding: 3px; gap: 3px; }
+  .clock-box { padding: 4px 4px; }
+  .clock-time { font-size: clamp(1.5rem, 9vmin, 3rem); }
+  .clock-label { font-size: clamp(.5rem, 1.8vmin, .65rem); }
+  .clock-btns button { padding: 4px 0; font-size: clamp(.55rem, 2vmin, .75rem); }
+  .shot-mode button { padding: 2px 5px; font-size: .6rem; }
+  .bottom-bar { padding: 3px; gap: 3px; }
+  .bottom-bar button { padding: 5px; font-size: .7rem; }
+}
 
 /* ==================== MODAL ==================== */
 .modal-bg { position: fixed; inset: 0; background: rgba(0,0,0,.85); display: none; align-items: center; justify-content: center; z-index: 100; padding: 20px; }
@@ -94,6 +116,10 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
       <button onclick="addFoul('home', 1)">F+1</button>
       <button onclick="addTimeout('home', 1)">TO+1</button>
     </div>
+    <div class="score-row3">
+      <button onclick="addFoul('home', -1)">F−1</button>
+      <button onclick="addTimeout('home', -1)">TO−1</button>
+    </div>
   </div>
 
   <div class="team away" id="teamAway">
@@ -110,6 +136,10 @@ body { padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-are
       <button onclick="addScore('away', -1)">−1</button>
       <button onclick="addFoul('away', 1)">F+1</button>
       <button onclick="addTimeout('away', 1)">TO+1</button>
+    </div>
+    <div class="score-row3">
+      <button onclick="addFoul('away', -1)">F−1</button>
+      <button onclick="addTimeout('away', -1)">TO−1</button>
     </div>
   </div>
 </div>
@@ -196,6 +226,33 @@ function buzzer() {
   beep(660, 0.3); setTimeout(() => beep(880, 0.5), 350);
   if (navigator.vibrate) navigator.vibrate([200, 100, 400]);
 }
+// プレイ時間終了用のホーン（長めに鳴らす）
+let _hornStop = null;
+function buzzerLong(duration = 3.5) {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    const now = audioCtx.currentTime;
+    // 2層のオシレータ（重ねるとホーン感が出る）
+    const osc1 = audioCtx.createOscillator();
+    const osc2 = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc1.type = 'sawtooth'; osc1.frequency.value = 220;
+    osc2.type = 'square';   osc2.frequency.value = 330;
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.35, now + 0.05);
+    gain.gain.setValueAtTime(0.35, now + duration - 0.2);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    osc1.connect(gain); osc2.connect(gain); gain.connect(audioCtx.destination);
+    osc1.start(now); osc2.start(now);
+    osc1.stop(now + duration); osc2.stop(now + duration);
+    _hornStop = () => { try { osc1.stop(); osc2.stop(); } catch(e){} };
+  } catch(e) { console.error(e); }
+  if (navigator.vibrate) navigator.vibrate([500,100,500,100,500,100,500,100,500]);
+}
+function stopHorn() { if (_hornStop) { _hornStop(); _hornStop = null; } if (navigator.vibrate) navigator.vibrate(0); }
+// 画面タップでホーン停止
+document.addEventListener('click', () => { if (_hornStop) stopHorn(); }, true);
 
 // ==================== WAKE LOCK ====================
 let wakeLock = null;
@@ -350,7 +407,8 @@ function tick() {
       if (c.time <= 0) {
         c.time = 0;
         c.running = false;
-        buzzer();
+        if (k === 'main') buzzerLong(3.5);
+        else buzzer();
         save();
       }
       if (Math.ceil(prev) !== Math.ceil(c.time)) needRender = true;
