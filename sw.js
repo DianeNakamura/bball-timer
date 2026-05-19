@@ -1,4 +1,4 @@
-const CACHE = 'bball-v5';
+const CACHE = 'bball-v6';
 const FILES = ['./', './index.html', './manifest.json'];
 
 self.addEventListener('install', e => {
