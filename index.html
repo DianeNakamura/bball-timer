@@ -189,26 +189,39 @@ function beep(freq = 880, dur = 0.15, type = 'square') {
   } catch(e) {}
 }
 let _hornStop = null;
-function buzzerLong(duration = 3.5) {
+function buzzerLong(duration = 3) {
+  // 電子メロディ: ドミソド の上昇アルペジオを繰り返す
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    const now = audioCtx.currentTime;
-    const osc1 = audioCtx.createOscillator();
-    const osc2 = audioCtx.createOscillator();
-    const gain = audioCtx.createGain();
-    osc1.type = 'sawtooth'; osc1.frequency.value = 220;
-    osc2.type = 'square';   osc2.frequency.value = 330;
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.35, now + 0.05);
-    gain.gain.setValueAtTime(0.35, now + duration - 0.2);
-    gain.gain.exponentialRampToValueAtTime(0.001, now + duration);
-    osc1.connect(gain); osc2.connect(gain); gain.connect(audioCtx.destination);
-    osc1.start(now); osc2.start(now);
-    osc1.stop(now + duration); osc2.stop(now + duration);
-    _hornStop = () => { try { osc1.stop(); osc2.stop(); } catch(e){} _hornStop = null; };
+    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+    const noteDur = 0.20;
+    const gap = 0.04;
+    const cycleLen = notes.length * (noteDur + gap);
+    const repeats = Math.max(1, Math.floor(duration / cycleLen));
+    const startNow = audioCtx.currentTime;
+    const oscList = [];
+    for (let r = 0; r < repeats; r++) {
+      for (let i = 0; i < notes.length; i++) {
+        const t0 = startNow + r * cycleLen + i * (noteDur + gap);
+        // 主音 + 1オクターブ上で厚み
+        for (const [f, vol] of [[notes[i], 0.32], [notes[i] * 2, 0.10]]) {
+          const osc = audioCtx.createOscillator();
+          const g = audioCtx.createGain();
+          osc.type = 'sine'; osc.frequency.value = f;
+          g.gain.setValueAtTime(0, t0);
+          g.gain.linearRampToValueAtTime(vol, t0 + 0.015);
+          g.gain.setValueAtTime(vol, t0 + noteDur - 0.06);
+          g.gain.exponentialRampToValueAtTime(0.001, t0 + noteDur);
+          osc.connect(g).connect(audioCtx.destination);
+          osc.start(t0); osc.stop(t0 + noteDur);
+          oscList.push(osc);
+        }
+      }
+    }
+    _hornStop = () => { for (const o of oscList) { try { o.stop(); } catch(e){} } _hornStop = null; };
   } catch(e) {}
-  if (navigator.vibrate) navigator.vibrate([500,100,500,100,500,100,500,100,500]);
+  if (navigator.vibrate) navigator.vibrate([180,80,180,80,180,80,180]);
 }
 function stopHorn() { if (_hornStop) { _hornStop(); if (navigator.vibrate) navigator.vibrate(0); } }
 document.addEventListener('click', () => { if (_hornStop) stopHorn(); }, true);
@@ -303,7 +316,7 @@ function tick() {
     if (c.time <= 0) {
       c.time = 0;
       c.running = false;
-      buzzerLong(3.5);
+      buzzerLong(3);
       save();
     }
     if (Math.ceil(prev) !== Math.ceil(c.time)) render();
