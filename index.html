@@ -189,39 +189,54 @@ function beep(freq = 880, dur = 0.15, type = 'square') {
   } catch(e) {}
 }
 let _hornStop = null;
-function buzzerLong(duration = 3) {
-  // 電子メロディ: ドミソド の上昇アルペジオを繰り返す
+function buzzerLong() {
+  // ホイッスル風: ピッ ピッ ピーーー（短2＋長1）
   try {
     if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     if (audioCtx.state === 'suspended') audioCtx.resume();
-    const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
-    const noteDur = 0.20;
-    const gap = 0.04;
-    const cycleLen = notes.length * (noteDur + gap);
-    const repeats = Math.max(1, Math.floor(duration / cycleLen));
-    const startNow = audioCtx.currentTime;
+    const now = audioCtx.currentTime;
+    // [start offset, duration] の3回
+    const blasts = [[0, 0.28], [0.45, 0.28], [0.90, 1.6]];
     const oscList = [];
-    for (let r = 0; r < repeats; r++) {
-      for (let i = 0; i < notes.length; i++) {
-        const t0 = startNow + r * cycleLen + i * (noteDur + gap);
-        // 主音 + 1オクターブ上で厚み
-        for (const [f, vol] of [[notes[i], 0.32], [notes[i] * 2, 0.10]]) {
-          const osc = audioCtx.createOscillator();
-          const g = audioCtx.createGain();
-          osc.type = 'sine'; osc.frequency.value = f;
-          g.gain.setValueAtTime(0, t0);
-          g.gain.linearRampToValueAtTime(vol, t0 + 0.015);
-          g.gain.setValueAtTime(vol, t0 + noteDur - 0.06);
-          g.gain.exponentialRampToValueAtTime(0.001, t0 + noteDur);
-          osc.connect(g).connect(audioCtx.destination);
-          osc.start(t0); osc.stop(t0 + noteDur);
-          oscList.push(osc);
-        }
-      }
+    for (const [off, dur] of blasts) {
+      const t0 = now + off;
+      // メイン音（笛の主周波数 ~2800Hz、サイン波）
+      const osc = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.value = 2800;
+      // 倍音で笛の鋭さを足す
+      const osc2 = audioCtx.createOscillator();
+      const g2 = audioCtx.createGain();
+      osc2.type = 'triangle';
+      osc2.frequency.value = 2800 * 1.5;
+      // トリル（笛の中の玉の振動）— 高速トレモロ
+      const lfo = audioCtx.createOscillator();
+      const lfoGain = audioCtx.createGain();
+      lfo.type = 'sine';
+      lfo.frequency.value = 22;
+      lfoGain.gain.value = 0.12;
+      // エンベロープ
+      g.gain.setValueAtTime(0, t0);
+      g.gain.linearRampToValueAtTime(0.30, t0 + 0.02);
+      g.gain.setValueAtTime(0.30, t0 + dur - 0.06);
+      g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      g2.gain.setValueAtTime(0, t0);
+      g2.gain.linearRampToValueAtTime(0.08, t0 + 0.02);
+      g2.gain.setValueAtTime(0.08, t0 + dur - 0.06);
+      g2.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+      lfo.connect(lfoGain);
+      lfoGain.connect(g.gain);
+      lfoGain.connect(g2.gain);
+      osc.connect(g).connect(audioCtx.destination);
+      osc2.connect(g2).connect(audioCtx.destination);
+      osc.start(t0); osc2.start(t0); lfo.start(t0);
+      osc.stop(t0 + dur); osc2.stop(t0 + dur); lfo.stop(t0 + dur);
+      oscList.push(osc, osc2, lfo);
     }
     _hornStop = () => { for (const o of oscList) { try { o.stop(); } catch(e){} } _hornStop = null; };
   } catch(e) {}
-  if (navigator.vibrate) navigator.vibrate([180,80,180,80,180,80,180]);
+  if (navigator.vibrate) navigator.vibrate([280,170,280,170,1600]);
 }
 function stopHorn() { if (_hornStop) { _hornStop(); if (navigator.vibrate) navigator.vibrate(0); } }
 document.addEventListener('click', () => { if (_hornStop) stopHorn(); }, true);
@@ -316,7 +331,7 @@ function tick() {
     if (c.time <= 0) {
       c.time = 0;
       c.running = false;
-      buzzerLong(3);
+      buzzerLong();
       save();
     }
     if (Math.ceil(prev) !== Math.ceil(c.time)) render();
